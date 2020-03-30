@@ -6,6 +6,7 @@ from dash.dependencies import Input, Output
 
 import pandas as pd
 import numpy as np
+from scipy.stats import sem
 import covid_backend as covid
 from datetime import datetime as dt
 
@@ -43,52 +44,21 @@ website_navbar = dbc.Navbar(
 choropleth_map = dbc.Card(dbc.CardBody(
                     [
                     html.Div([html.H1("COVID-19 dynamics by country")],
-                                style={'textAlign': "center", "padding-bottom": "30"}),
-                       html.Div([html.Span("Metric to display : ", className="six columns",
-                                           style={"text-align": "right", "width": "40%", "padding-top": 10}),
+                                style={'textAlign': "left", "padding-bottom": "30"}),
+                       html.Div([html.Span("Statistic to display : ", className="six columns",
+                                           style={"text-align": "left", "padding-top": 10, "padding-left": 25}),
                                  dcc.Dropdown(id="value-selected", value='lifeExp',
                                               options=[{'label': "Population ", 'value': 'pop'},
                                                        {'label': "GDP Per Capita ", 'value': 'gdpPercap'},
                                                        {'label': "Life Expectancy ", 'value': 'lifeExp'}],
-                                              style={"display": "block", "margin-left": "auto", "margin-right": "auto",
-                                                     "width": "70%"},
+                                              style={"display": "block", "margin-left": 10, "margin-right": 10,
+                                                     "margin-bottom":10, "width": "100%"},
                                               className="six columns")], className="row"),
-                       dcc.Graph(id="choropleth_map")
+                       dcc.Graph(id="choropleth_map"),
                     ],
                     ),
                     className="mt-1",
                 )
-
-
-def get_cases_graphs(countries, confirmed_data, countries_list, data_dates):
-    cases_graphs = []
-
-    idxs = [countries_list.index(country) for country in countries]
-
-    data = []
-    for idx in idxs:
-        data.append(go.Scatter(
-            x=list(data_dates),
-            y=np.array(confirmed_data[idx]),
-            mode='lines+markers',
-            name=countries_list[idx]))
-
-    max_cases = max([max(vals) for vals in confirmed_data[idxs]])
-    max_cases = max_cases + max_cases*0.1
-
-    cases_graphs.append(html.Div(dcc.Graph(
-        id='cases_graphs',
-        figure={'data': data,
-                'layout': go.Layout(xaxis=dict(range=[min(data_dates), max(data_dates)]),
-                                    yaxis=dict(range=[0, max_cases]),
-                                    margin={'l': 50, 'r': 1,
-                                            't': 45, 'b': 40},
-                                    xaxis_title='Day',
-                                    yaxis_title='Number of people',
-                                    title='Total confirmed COVID-19 cases',
-                                    showlegend=True)})))
-
-    return cases_graphs
 
 
 def get_epicurve_graphs(countries, epicurves, countries_list, data_dates):
@@ -110,13 +80,15 @@ def get_epicurve_graphs(countries, epicurves, countries_list, data_dates):
         figure={'data': data,
                 'layout': go.Layout(xaxis=dict(range=[min(data_dates[1:]), max(data_dates[1:])]),
                                     yaxis=dict(range=[0, max_cases]),
-                                    margin={'l': 50, 'r': 1,
+                                    margin={'l': 40, 'r': 1,
                                             't': 45, 'b': 40},
                                     xaxis_title='Day',
                                     yaxis_title='Number of people',
-                                    title='Epidemiological curves (total new COVID-19 cases per day)',
+                                    title='Epidemiological curves (new cases/day)',
                                     barmode='group',
-                                    showlegend=True)})))
+                                    showlegend=True,
+                                    legend=dict(orientation='h',xanchor='left',yanchor='bottom',y=-0.25),
+                                    )})))
 
     return epicurve_graphs
 
@@ -154,15 +126,17 @@ def get_rcurve_graphs(countries, rcurves):
         figure={'data': data,
                 'layout': go.Layout(xaxis=dict(range=[min_date, max_date]),
                                     yaxis=dict(range=[0, max_value+2.0]),
-                                    margin={'l': 50, 'r': 1,
+                                    margin={'l': 40, 'r': 1,
                                             't': 45, 'b': 40},
                                     xaxis_title='Day',
                                     yaxis_title='R<sub>t</sub>',
-                                    title='Change in effective Reproduction Number (R<sub>t</sub>)',
+                                    title='Effective Reproduction Number (R<sub>t</sub>)',
                                     barmode='group',
-                                    showlegend=True)})))
+                                    showlegend=True,
+                                    legend=dict(orientation='h',xanchor='left',yanchor='bottom',y=-0.25),
+                                    )})))
 
-    return rcurve_graphs
+    return rcurve_graphs, [min_date, max_date]
 
 
 countries_dropdown = html.Div([
@@ -174,16 +148,21 @@ countries_dropdown = html.Div([
                          ), ])
 
 
+graphs_and_control = dbc.Card(dbc.CardBody(
+                    [
+                    html.H1('Visualizing COVID-19 dynamics'),
+                    countries_dropdown,
+                    dbc.Container(id="graph-content"),
+                    ]
+                    ), className="mt-3",
+                    )
+
 national_tab_content = dbc.Card(
     dbc.CardBody(
         [
             choropleth_map,
             html.Hr(),
-            html.H1('Visualizing COVID-19 dynamics'),
-            countries_dropdown,
-            dbc.Card(dbc.CardBody([dbc.Row(id="graph-content",),]), className="mt-3"),
-            html.Hr(),
-            html.H1('Evaluating control measures'),
+            graphs_and_control,
         ]
     ),
     className="mt-3",
@@ -193,8 +172,7 @@ national_tab_content = dbc.Card(
 regional_tab_content = dbc.Card(
     dbc.CardBody(
         [
-            html.P("This is tab 2!", className="card-text"),
-            dbc.Button("Don't click here", color="danger"),
+            html.P("Under construction."),
         ]
     ),
     className="mt-3",
@@ -207,17 +185,6 @@ tabs = dbc.Tabs(
         dbc.Tab(regional_tab_content, label="Regional data"),
     ]
 )
-
-
-date_picker = dcc.DatePickerSingle(
-    id='my-date-picker-single',
-    min_date_allowed=dt(1995, 8, 5),
-    max_date_allowed=dt(2017, 9, 19),
-    initial_visible_month=dt(2017, 8, 5),
-    date=str(dt(2017, 8, 25, 23, 59, 59))
-)
-
-
 
 # home page layout
 home_layout = dbc.Container([
@@ -243,7 +210,7 @@ app.layout = dbc.Container([
 
 
 @app.callback(Output("choropleth_map", "figure"),
-    [Input("value-selected", "value")])
+             [Input("value-selected", "value")])
 def update_figure(selected):
     dff = df.groupby(['iso_alpha', 'country']).mean().reset_index()
     def title(text):
@@ -265,31 +232,84 @@ def update_figure(selected):
 @app.callback(Output("graph-content", "children"),
              [Input('country-name', 'value')],)
 def render_graph_content(countries):
-    cases_graph = dbc.Col(dbc.Card(
-        dbc.CardBody(
-             get_cases_graphs(countries, confirmed_data, countries_list, data_dates)
-            ), className="ml-2",
-        ), width="auto")
-
-
     epi_graph = dbc.Col(dbc.Card(
         dbc.CardBody(
              get_epicurve_graphs(countries, epicurves, countries_list, data_dates)
-            ), className="ml-2",
-        ), width="auto")
+            ), className="ml-0",
+        ))
 
+    r_curve_graphs, date_range = get_rcurve_graphs(countries, rcurves)
 
     r_graph = dbc.Col(dbc.Card(
         dbc.CardBody(
-             get_rcurve_graphs(countries, rcurves)
-            ), className="ml-2",
-        ), width="auto")
+             r_curve_graphs
+            ), className="ml-1",
+        ))
 
-    return [cases_graph, epi_graph, r_graph,]
+    date_picker = dcc.DatePickerSingle(
+                        id='r-date-picker',
+                        min_date_allowed=date_range[0],
+                        max_date_allowed=date_range[1],
+                        initial_visible_month=dt.today(),
+                        date=str(dt(2020,3,11)),
+                        display_format="MMM Do, YY"
+                    )
+
+    description = html.P("""Pick a date of reference. This date can be the day
+        some control measures were implemented in your region of interest.
+        Example— On March 11th 2020, WHO declared COVID-19 as a pandemic; on March 18th,
+        2020, US and Canada closed its borders for non-essential traffic; on March 9th,
+        2020 the government of Italy imposed a national quarantine; on January 23rd, 2020,
+        the government of China issued a lockdown on Wuhan and other cities in Hubei.""")
+
+    eval_control = dbc.Col(dbc.Card(dbc.CardBody(
+                    [
+                    html.H2('Evaluating effectiveness of control measures'),
+                    html.Br(),
+                    description,
+                    html.H6("Enter a date of reference: "),
+                    date_picker,
+                    html.P(),
+                    html.H4("Comparing average R before/after date of reference"),
+                    dbc.Container(id='r-evaluation'),
+                    ])))
+
+    graph_content = [
+                    dbc.Row([epi_graph,r_graph], className="mt-3"),
+                    dbc.Row([eval_control], className="mt-3",),
+                    ]
+
+    return graph_content
+
+
+@app.callback(Output('r-evaluation', 'children'),
+             [Input('r-date-picker', 'date'),
+             Input('country-name', 'value')],)
+def update_r_evaluation(ref_date, countries):
+    ref_date_dt = dt.strptime(ref_date, "%Y-%m-%d %H:%M:%S")
+    before_list = list([html.H6("Average R before "+ref_date_dt.strftime("%d %B, %Y"), className="card-title")])
+    after_list = list([html.H6("Average R after "+ref_date_dt.strftime("%d %B, %Y"), className="card-title")])
+
+    for country in countries:
+        ref = np.argwhere((rcurves[country]['dates'] > ref_date_dt) == True)[0][0]
+        before_mean = np.around(np.mean(rcurves[country]['mean_r'][:ref]), decimals=2)
+        before_sem = np.around(sem(rcurves[country]['mean_r'][:ref]), decimals=2)
+        after_mean = np.around(np.mean(rcurves[country]['mean_r'][ref:]), decimals=2)
+        after_sem = np.around(sem(rcurves[country]['mean_r'][ref:]), decimals=2)
+        before_list.append(html.P(country+": "+str(before_mean)+" \u00B1 "+str(before_sem)))
+        after_list.append(html.P(country+": "+str(after_mean)+" \u00B1 "+str(after_sem)))
+
+
+    evaluation_output = dbc.Row([
+        dbc.Col(dbc.Card(dbc.CardBody(before_list))),
+        dbc.Col(dbc.Card(dbc.CardBody(after_list))),
+        ], className="mt-3")
+
+    return [evaluation_output]
 
 
 @app.callback(Output('page-content', 'children'),
-              [Input('url', 'pathname')],)
+             [Input('url', 'pathname')],)
 def display_page(pathname):
     if pathname == '/':
         return home_layout
