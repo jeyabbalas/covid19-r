@@ -7,8 +7,10 @@ from dash.dependencies import Input, Output
 import pandas as pd
 import numpy as np
 from scipy.stats import sem
-import covid_backend as covid
 from datetime import datetime as dt
+import pycountry
+
+import covid_backend as covid
 
 import plotly.graph_objs as go
 
@@ -19,7 +21,6 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.config.suppress_callback_exceptions = True
 
 confirmed_data, epicurves, rcurves, countries_list, data_dates = covid.get_covid_data()
-df = pd.read_csv('https://raw.githubusercontent.com/plotly/datasets/master/gapminder_with_codes.csv')
 
 
 website_navbar = dbc.Navbar(
@@ -47,10 +48,10 @@ choropleth_map = dbc.Card(dbc.CardBody(
                                 style={'textAlign': "left", "padding-bottom": "30"}),
                        html.Div([html.Span("Statistic to display : ", className="six columns",
                                            style={"text-align": "left", "padding-top": 10, "padding-left": 25}),
-                                 dcc.Dropdown(id="value-selected", value='lifeExp',
-                                              options=[{'label': "Population ", 'value': 'pop'},
-                                                       {'label': "GDP Per Capita ", 'value': 'gdpPercap'},
-                                                       {'label': "Life Expectancy ", 'value': 'lifeExp'}],
+                                 dcc.Dropdown(id="value-selected", value='Total Cases',
+                                              options=[{'label': "Log10 of Total Cases ", 'value': 'Total Cases'},
+                                                       {'label': "Log10 of New Cases (on last reported day) ", 'value': 'New Cases'},
+                                                       {'label': "Average Reproduction Number ", 'value': 'Average R'}],
                                               style={"display": "block", "margin-left": 10, "margin-right": 10,
                                                      "margin-bottom":10, "width": "100%"},
                                               className="six columns")], className="row"),
@@ -182,19 +183,80 @@ regional_tab_content = dbc.Card(
 tabs = dbc.Tabs(
     [
         dbc.Tab(national_tab_content, label="National data"),
-        dbc.Tab(regional_tab_content, label="Regional data"),
+        #dbc.Tab(regional_tab_content, label="Regional data"),
     ]
 )
 
 # home page layout
 home_layout = dbc.Container([
     tabs,
+    dcc.Interval(
+        id='data-auto-update',
+        interval=2160000,
+        n_intervals=0),
+    html.P(id='placeholder')
 ])
 
 
 # about page layout
 about_page_layout = dbc.Container([
-    html.H1('What is this?'),
+    html.H1("What is this?"),
+    html.Br(),
+    html.H4("Who developed this website and why?"),
+    html.P("""
+        My name is Jeya Balaji Balasubramanian. I developed this website mainly
+        to learn concepts surrounding web application development.
+        """),
+    html.P("""
+        Functionally, the purpose of this website is to help monitor the extent
+        of the current COVID-19 pandemic. It extracts global COVID-19 transmission dynamics
+        data from Johns Hopkins University.
+        """),
+    html.P("""
+        The contents of this website should be used with discretion as I do not have an
+        epidemiological background.
+        """),
+    html.H4("What is the data source?"),
+    html.P("From Johns Hopkins University, linked below—"),
+    html.A("https://github.com/CSSEGISandData/COVID-19", href="https://github.com/CSSEGISandData/COVID-19"),
+    html.P(),
+    html.H4("What is Reproduction Number?"),
+    html.P("""
+        Reproduction number is a statistic that helps quantify the transmissibility of a disease.
+        It is defined as the average number of secondary cases that an individual with the
+        infection is likely to infect. This statistic depends upon the virality of the pathogen
+        and the social conditions around the susceptible population. Therefore, this statistic
+        can help in disease surveillence and to check if interventions like social distancing,
+        quarantine, travel ban, vaccines, etc. have been effective.
+        """),
+    html.H4("How do you calculate the daily Reproduction Number?"),
+    html.P("""
+        I implemented the Wallinga-Teunis method (see References 1 and 2 below). I get the case
+        incidence data from Johns Hopkins University (see above). I get the serial interval
+        distribution from the gamma distribution parameters from reference 3 below.
+        """),
+    html.P("""
+        Since the time-step is small here (daily), the estimates of R varies considerably increasing
+        the risk of negative autocorrelation. To mitigate that, I calculate the estimates over a window
+        of 3 days. For details of this method, see reference 1.
+        """),
+    html.H4("Contact me"),
+    html.P("You can approach me on my LinkedIn page—"),
+    html.A("https://www.linkedin.com/in/jbbalas", href="https://www.linkedin.com/in/jbbalas"),
+    html.P(),
+    html.H4("References"),
+    html.P("""[1]\tCori A, Ferguson NM, Fraser C, Cauchemez S. A new framework and
+        software to estimate time-varying reproduction numbers during epidemics. American
+        journal of epidemiology. 2013 Nov 1;178(9):1505-12."""),
+    html.P("""[2]\tWallinga J, Teunis P. Different epidemic curves for severe acute
+        respiratory syndrome reveal similar impacts of control measures. American Journal
+        of epidemiology. 2004 Sep 15;160(6):509-16.
+        """),
+    html.P("""
+        [3]\tDu Z, Xu X, Wu Y, Wang L, Cowling BJ, Meyers LA. The serial interval of
+        COVID-19 from publicly reported confirmed cases. medRxiv. 2020 Jan 1.
+        """),
+
 ])
 
 
@@ -212,15 +274,28 @@ app.layout = dbc.Container([
 @app.callback(Output("choropleth_map", "figure"),
              [Input("value-selected", "value")])
 def update_figure(selected):
-    dff = df.groupby(['iso_alpha', 'country']).mean().reset_index()
+    country_iso_codes = covid.get_country_iso_codes()
+    encoded_countries = list(countries_list)
+
+    avg_r = np.zeros(len(countries_list), np.float32)
+    for country in rcurves.keys():
+        idx = countries_list.index(country)
+        encoded_countries[idx] = country_iso_codes[countries_list[idx]]
+        if len(rcurves[country]['mean_r'])==0:
+            avg_r[idx] = 0.0
+        avg_r[idx] = np.mean(rcurves[country]['mean_r'])
+
+    map_data = np.vstack((np.array(encoded_countries), np.log10(np.max(confirmed_data, axis=1)), np.log10(epicurves[:,-1]), avg_r))
+    map_df = pd.DataFrame(map_data.T, columns = ['Country', 'Total Cases', 'New Cases', 'Average R'])
+
     def title(text):
-        if text == "pop":
-            return "Poplulation (million)"
-        elif text == "gdpPercap":
-            return "GDP Per Capita (USD)"
+        if text == 'Total Cases':
+            return "Log10 of Total Cases"
+        elif text == 'New Cases':
+            return "Log10 of Total New Cases (on last reported day)"
         else:
-            return "Life Expectancy (Years)"
-    trace = go.Choropleth(locations=dff['iso_alpha'],z=dff[selected],text=dff['country'],autocolorscale=False,
+            return "Average R<sub>t</sub> over Time"
+    trace = go.Choropleth(locations=map_df['Country'],z=map_df[selected],text=map_df['Country'],autocolorscale=False,
                           colorscale="YlGnBu",marker={'line': {'color': 'rgb(180,180,180)','width': 0.5}},
                           colorbar={"thickness": 10,"len": 0.3,"x": 0.9,"y": 0.7,
                                     'title': {"text": title(selected), "side": "bottom"}})
@@ -257,7 +332,7 @@ def render_graph_content(countries):
 
     description = html.P("""Pick a date of reference. This date can be the day
         some control measures were implemented in your region of interest.
-        Example— On March 11th 2020, WHO declared COVID-19 as a pandemic; on March 18th,
+        Example— On March 11th, 2020, WHO declared COVID-19 as a pandemic; on March 18th,
         2020, US and Canada closed its borders for non-essential traffic; on March 9th,
         2020 the government of Italy imposed a national quarantine; on January 23rd, 2020,
         the government of China issued a lockdown on Wuhan and other cities in Hubei.""")
@@ -286,7 +361,7 @@ def render_graph_content(countries):
              [Input('r-date-picker', 'date'),
              Input('country-name', 'value')],)
 def update_r_evaluation(ref_date, countries):
-    ref_date_dt = dt.strptime(ref_date, "%Y-%m-%d %H:%M:%S")
+    ref_date_dt = dt.strptime(ref_date[:10], "%Y-%m-%d")
     before_list = list([html.H6("Average R before "+ref_date_dt.strftime("%d %B, %Y"), className="card-title")])
     after_list = list([html.H6("Average R after "+ref_date_dt.strftime("%d %B, %Y"), className="card-title")])
 
@@ -306,6 +381,12 @@ def update_r_evaluation(ref_date, countries):
         ], className="mt-3")
 
     return [evaluation_output]
+
+
+@app.callback(Output('placeholder', 'children'),
+             [Input('data-auto-update', 'n_intervals')],)
+def update_data(n):
+    confirmed_data, epicurves, rcurves, countries_list, data_dates = covid.get_covid_data()
 
 
 @app.callback(Output('page-content', 'children'),
