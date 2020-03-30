@@ -8,7 +8,6 @@ import pandas as pd
 import numpy as np
 from scipy.stats import sem
 from datetime import datetime as dt
-import pycountry
 
 import covid_backend as covid
 
@@ -17,9 +16,11 @@ import plotly.graph_objs as go
 
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
+server = app.server
+
 # allow exceptions from adding callbacks to elements that don't exist yet on layout
 app.config.suppress_callback_exceptions = True
-
+#
 confirmed_data, epicurves, rcurves, countries_list, data_dates = covid.get_covid_data()
 
 
