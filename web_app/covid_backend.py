@@ -112,6 +112,7 @@ def get_country_iso_codes():
  'Bhutan': 'BTN',
  'Bolivia': 'BOL',
  'Bosnia and Herzegovina': 'BIH',
+ 'Botswana': 'BWA',
  'Brazil': 'BRA',
  'Brunei': 'BRN',
  'Bulgaria': 'BGR',
