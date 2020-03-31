@@ -281,7 +281,10 @@ def update_figure(selected):
     avg_r = np.zeros(len(countries_list), np.float32)
     for country in rcurves.keys():
         idx = countries_list.index(country)
-        encoded_countries[idx] = country_iso_codes[countries_list[idx]]
+        if countries_list[idx] in country_iso_codes.keys():
+            encoded_countries[idx] = country_iso_codes[countries_list[idx]]
+        else:
+            encoded_countries[idx] = 'UNK'
         if len(rcurves[country]['mean_r'])==0:
             avg_r[idx] = 0.0
         avg_r[idx] = np.mean(rcurves[country]['mean_r'])
