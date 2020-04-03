@@ -1,6 +1,6 @@
 # Computing effective reproduction number
 
-In this project, I developed a web app to compute daily effective Reproduction Number and deployed this app on a Heroku cloud server.
+In this project, I developed a web app to compute daily effective Reproduction Number and deployed this app on a Heroku cloud server (http://covid19-r.herokuapp.com/).
 
 I implemented the Wallinga-Teunis method (see References 1 and 2 below). I get the case incidence data from Johns Hopkins University (see above). I get the serial interval distribution from the gamma distribution parameters from reference 3 below.
 
